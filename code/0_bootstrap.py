@@ -48,9 +48,14 @@
 # to store hive data. On AWS it will be s3a://[something], on Azure it will be
 # abfs://[something] and on a CDSW cluster, it will be hdfs://[something]
 
-# Install the requirements
-!pip3 install -r requirements.txt
+# Install the requirements 
+# Depending on 
+import subprocess
 
+subprocess.run(
+        "pip install -r  /home/cdsw/requirements.txt --upgrade", shell=True
+    )
+    
 # Create the directories and upload data
 from cmlbootstrap import CMLBootstrap
 from IPython.display import Javascript, HTML
