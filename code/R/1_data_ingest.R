@@ -55,8 +55,7 @@ storage      <- Sys.getenv("STORAGE")
 
 # -- Set master to "yarn-client" or "local[*]" depending on your deployment type
 # To enable Spark push down set  "/etc/spark/conf/spark-defaults.conf" (Ref: https://therinspark.com/tuning.html (Chapter 9.2.2) )
-
-
+# spark.shuffle.service.port =. 7337 - Fix issue with Spark which default to other value (check in Cloudera Manager if value is correct)
 default_config <- list(
                       "sparklyr.shell.properties-file" =  "/etc/spark/conf/spark-defaults.conf", 
                       "spark.shuffle.service.port"     = "7337"
@@ -97,6 +96,7 @@ data_location <- Sys.getenv("DATA_LOCATION")
 
 
 # Raw data stored in CDP Base with 0_bootstrap
+# TO BE MODIFY: to use data_location variable
 path <- paste0(storage, "/data/churn_prototype/WA_Fn-UseC_-Telco-Customer-Churn-.csv")
 
 telco_data <- spark_read_csv(spark, "mydate", path = path, infer_schema = FALSE, columns = schema, na = "NA",delimiter = ",")
@@ -112,9 +112,6 @@ spark.sql("show tables in " + hive_database).show()
 # Create the Hive table, if possible
 # This is here to create the table in Hive used be the other parts of the project, if it
 # does not already exist.
-telco_data.write.format("parquet").mode("overwrite").saveAsTable(
-                    hive_table_fq
-                )
 hive_database <- Sys.getenv("HIVE_DATABASE")
 hive_table    <- Sys.getenv("HIVE_TABLE")
 
