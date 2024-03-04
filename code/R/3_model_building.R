@@ -43,79 +43,95 @@ library(dplyr)
 library(stringr)
 
 
-# Set the setup variables needed by CMLBootstrap
-HOST         <- str_split(Sys.getenv("CDSW_API_URL"), ':')[[1]]
-HOST         <- paste0 ( HOST[1], "://", Sys.getenv("CDSW_DOMAIN") ) 
-USERNAME     <- str_split(Sys.getenv("CDSW_PROJECT_URL"), "/")[[1]][7]  # args.username  # "vdibia"
-API_KEY      <- Sys.getenv("CDSW_API_KEY")
-PROJECT_NAME <- Sys.getenv("CDSW_PROJECT")
 
-storage      <- Sys.getenv("STORAGE")
+hive_database <- Sys.getenv("HIVE_DATABASE")
+hive_table.   <- Sys.getenv("HIVE_TABLE")
+hive_table_fq <- paste0(hive_database, '.', hive_table)
 
 
 # -- Set master to "yarn-client" or "local[*]" depending on your deployment type
 # To enable Spark push down set  "/etc/spark/conf/spark-defaults.conf" (Ref: https://therinspark.com/tuning.html (Chapter 9.2.2) )
 # spark.shuffle.service.port =. 7337 - Fix issue with Spark which default to other value (check in Cloudera Manager if value is correct)
-# spark.shuffle.service.port = 7447  (Spark 3)
-# spark.shuffle.service.port = 7337  (Spark 2)
 default_config <- list(
-                      "sparklyr.shell.properties-file" =  "/etc/spark/conf/spark-defaults.conf", 
-                      "spark.shuffle.service.port"     = "7337"
-                  )
-
-default_config
-spark <- spark_connect(master="yarn", app_name = "1_data_ingest.R", config = default_config )
-
-print(spark_config(spark))
-
-
-schema <- list(
-        customerID       = "string",
-        gender           = "string",
-        SeniorCitizen    = "string",
-        Partner          = "string",
-        Dependents       = "string",
-        tenure           = "double",
-        PhoneService     = "string",
-        MultipleLines    = "string",
-        InternetService  = "string",
-        OnlineSecurity   = "string",
-        OnlineBackup     = "string",
-        DeviceProtection = "string",
-        TechSupport      = "string",
-        StreamingTV      = "string",
-        StreamingMovies  = "string",
-        Contract         = "string",
-        PaperlessBilling = "string",
-        PaymentMethod    = "string",
-        MonthlyCharges   = "double",
-        TotalCharges     = "double",
-        Churn            = "string"
+  "sparklyr.shell.properties-file" =  "/etc/spark/conf/spark-defaults.conf", 
+  "spark.shuffle.service.port"     = "7337"
 )
 
-# Now we can read in the data into Spark
-data_location <- Sys.getenv("DATA_LOCATION")
+# Connect to Spark
+spark <- spark_connect(master="yarn", app_name = "1_data_ingest.R", config = default_config )
 
-# Raw data stored in CDP Base with 0_bootstrap
-# TO BE MODIFY: to use data_location variable
-path <- paste0(storage, '/', data_location, "/WA_Fn-UseC_-Telco-Customer-Churn-.csv")
 
-telco_data <- spark_read_csv(spark, "mydate", path = path, infer_schema = FALSE, columns = schema, na = "NA",delimiter = ",")
+# read data into a Spark DataFrame
+if (Sys.getenv("STORAGE_MODE") == "external") {
+  sql <- paste0('SELECT * FROM ', hive_table_fq)
+  telco_data_raw <- sparklyr::sdf_sql(spark, sql)
+}
 
- # ...and inspect the data.
-head(telco_data, 10)
+# Feature columns
 
-sdf_schema(telco_data)
 
-# Create the Hive table, if possible
-# This is here to create the table in Hive used be the other parts of the project, if it
-# does not already exist.
-hive_database <- Sys.getenv("HIVE_DATABASE")
-hive_table    <- Sys.getenv("HIVE_TABLE")
 
-hive_table_fq <- paste0(hive_database, ".", hive_table)
+# data preprocessing and munging
 
-spark_write_table(telco_data, name = hive_table_fq )
+idcol    <- 'customerID'  # ID column
 
-        
-spark_disconnect(spark)
+
+cols <- list (
+        c('gender', TRUE),                       # (feature column, Categorical?)
+        c('SeniorCitizen', TRUE),
+        c('Partner', TRUE),
+        c('Dependents', TRUE),
+        c('tenure', FALSE),
+        c('PhoneService', TRUE),
+        c('MultipleLines', TRUE),
+        c('InternetService', TRUE),
+        c('OnlineSecurity', TRUE),
+        c('OnlineBackup', TRUE),
+        c('DeviceProtection', TRUE),
+        c('TechSupport', TRUE),
+        c('StreamingTV', TRUE),
+        c('StreamingMovies', TRUE),
+        c('Contract', TRUE),
+        c('PaperlessBilling', TRUE),
+        c('PaymentMethod', TRUE),
+        c('MonthlyCharges', FALSE),
+        c('TotalCharges', FALSE))
+
+
+telco_data_raw <- telco_data_raw %>% mutate_all(~ifelse(trimws(.x) == "", NA, .x)) # drop blank rows
+telco_data_raw <- telco_data_raw %>%                                               # Change  Yes/No by 1, 0 in LAbel columns
+                     mutate(Churn = case_when(
+                       Churn == "No"  ~ 0,
+                       Churn == "Yes" ~ 1,
+                       TRUE ~ Churn
+                     ))
+
+telco_data_raw <- telco_data_raw %>%                    # Change 1/0 to Yes/No to match the other binary features
+  mutate(SeniorCitizen = case_when(
+    SeniorCitizen == 0 ~ "No",
+    SeniorCitizen == 1 ~ "Yes",
+    TRUE ~ as.character(SeniorCitizen)  
+  ))
+
+
+data   <- telco_data_raw %>% select(-labelcol)                       # separate out the label
+labels <- telco_data_raw %>% select( labelcol)
+
+selected_cols <- unlist(lapply(cols, function(x) if (x[2]) x[1]))   # only use the feature columns named in `cols`
+data <- data %>% select(selected_cols)
+
+
+## Machine Learning Model Training
+## ---------------------------------
+
+sample_size <- data %>% count()  %>% collect() %>% first() %>% as.numeric()
+data_r <- data %>% sample_n(size = sample_size) %>% collect()
+
+
+
+
+
+
+
+
+
