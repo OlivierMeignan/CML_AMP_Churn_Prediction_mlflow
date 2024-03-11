@@ -37,45 +37,58 @@
 #  DATA.
 #
 # ###########################################################################
-library(cml)
-library(jsonlite)
+import os
+import sys
+from cml import metrics_v1
 
-# Load the decision  model from file
-model <- readRDS("./model.rds")
+#https://docs.cloudera.com/machine-learning/1.5.3/runtimes/topics/ml-models-in-pbj-workbench.html
 
-f_predict <- function(json_input) {
-  input_df    <- data.frame(fromJSON(json_input))
-  prediction  <- stats::predict(model, input_df, type = "response") 
-  json_output <- jsonlite::toJSON(prediction)
-  return(json_output)
+
+os.environ['RETICULATE_PYTHON'] = sys.executable
+os.environ['R_HOME'] = '/usr/lib/R'
+
+import rpy2.robjects as robjects
+
+r = robjects.r
+
+model = r.readRDS(file='model.rds')
+
+
+#Load the R model saved earlier.
+
+#json_input={
+#"gender"           : "Female",
+  "tenure"           : "20",
+  "PhoneService"     : "Yes",
+  "MultipleLines"    : "No",
+  "InternetService"  : "DSL",
+  "OnlineSecurity"   : "No",
+  "OnlineBackup"     : "No",
+  "DeviceProtection" : "No",
+  "TechSupport"      : "No",
+  "StreamingTV"      : "No",
+  "StreamingMovies"  : "No",
+  "Contract"         : "Month-to-month",
+  "PaperlessBilling" : "No",
+  "PaymentMethod"    : "Bank transfer (automatic)",
+  "MonthlyCharges"   : "06",
+  "TotalCharges"     : "1000"
 }
 
 
-
-#json_input='{
-# "gender"           : "Female",
-#  "tenure"           : "20",
-#  "PhoneService"     : "Yes",
-#  "MultipleLines"    : "No",
-#  "InternetService"  : "DSL",
-#  "OnlineSecurity"   : "No",
-#  "OnlineBackup"     : "No",
-#  "DeviceProtection" : "No",
-#  "TechSupport"      : "No",
-#  "StreamingTV"      : "No",
-#  "StreamingMovies"  : "No",
-#  "Contract"         : "Month-to-month",
-#  "PaperlessBilling" : "No",
-#  "PaymentMethod"    : "Bank transfer (automatic)",
-#  "MonthlyCharges"   : "06",
-#  "TotalCharges"     : "1000"
-#}'
-
- 
-#f_predict(json_input)
-# prediction <- stats::predict(model, input_df, type = "response") 
-# json_output <- jsonlite::toJSON(prediction)
+def f_predict(json_input):
+   # Track inputs
+   metrics_v1.track_metric('input_data', json_input)
+   # Predict
+   rdf = robjects.DataFrame(json_input)
+   pred = r.predict(model, rdf, type = "response")
+   # Track our prediction
+   metrics_v1.track_metric('prediction', pred[0])
+   # Return Input and prediction
+   return { "data" : json_input, "prediction" : pred[0]}
 
 
-  
-  
+
+#print (f_predict(json_input))
+
+

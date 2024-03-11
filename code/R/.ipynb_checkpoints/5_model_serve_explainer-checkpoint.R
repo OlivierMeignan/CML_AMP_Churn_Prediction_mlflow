@@ -38,44 +38,19 @@
 #
 # ###########################################################################
 library(cml)
-library(jsonlite)
 
 # Load the decision  model from file
 model <- readRDS("./model.rds")
 
-f_predict <- function(json_input) {
-  input_df    <- data.frame(fromJSON(json_input))
-  prediction  <- stats::predict(model, input_df, type = "response") 
+predict <- function(json_input) {
+  input_df = data.frame(json_input)
+  prediction <- predict(model, input_df)  
   json_output <- jsonlite::toJSON(prediction)
   return(json_output)
 }
 
 
-
-#json_input='{
-# "gender"           : "Female",
-#  "tenure"           : "20",
-#  "PhoneService"     : "Yes",
-#  "MultipleLines"    : "No",
-#  "InternetService"  : "DSL",
-#  "OnlineSecurity"   : "No",
-#  "OnlineBackup"     : "No",
-#  "DeviceProtection" : "No",
-#  "TechSupport"      : "No",
-#  "StreamingTV"      : "No",
-#  "StreamingMovies"  : "No",
-#  "Contract"         : "Month-to-month",
-#  "PaperlessBilling" : "No",
-#  "PaymentMethod"    : "Bank transfer (automatic)",
-#  "MonthlyCharges"   : "06",
-#  "TotalCharges"     : "1000"
-#}'
-
- 
-#f_predict(json_input)
-# prediction <- stats::predict(model, input_df, type = "response") 
-# json_output <- jsonlite::toJSON(prediction)
+a <- predict('{"input" : "b"}})
+print (a)
 
 
-  
-  

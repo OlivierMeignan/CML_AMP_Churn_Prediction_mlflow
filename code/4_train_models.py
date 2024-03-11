@@ -83,6 +83,8 @@ import os
 import pandas as pd
 import numpy as np
 import cdsw
+import mlflow
+
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -92,7 +94,7 @@ from sklearn.compose import ColumnTransformer
 from lime.lime_tabular import LimeTabularExplainer
 
 #MLFlow and additional model type for experimentation
-import mlflow
+
 from sklearn.svm import SVC
 
 try:
@@ -111,7 +113,7 @@ labelcol = "Churn"
 
 # This is a fail safe incase the hive table did not get created in the last step.
 try:
-    spark = SparkSession.builder.appName("PythonSQL").master("local[*]").getOrCreate()
+    spark = SparkSession.builder.appName("PythonSQL").master("yarn").getOrCreate()
 
     if spark.sql("SELECT count(*) FROM " + hive_table_fq).collect()[0][0] > 0:
         df = spark.sql("SELECT * FROM " + hive_table_fq).toPandas()

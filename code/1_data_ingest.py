@@ -150,7 +150,7 @@ except:
     
 
 
-spark = SparkSession.builder.appName("PythonSQL").master("local[*]").getOrCreate()
+spark = SparkSession.builder.appName("PythonSQL").master("yarn").getOrCreate()
 
 # **Note:**
 # Our file isn't big, so running it in Spark local mode is fine but you can add the following config

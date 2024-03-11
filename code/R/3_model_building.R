@@ -41,7 +41,7 @@
 library(sparklyr)
 library(dplyr)
 library(stringr)
-
+library(broom)
 
 
 hive_database <- Sys.getenv("HIVE_DATABASE")
@@ -118,9 +118,6 @@ if (Sys.getenv("STORAGE_MODE") == "external") {
 # Feature columns
 cols <- list (
         c('gender', TRUE),                       # (feature column, Categorical?)
-        c('SeniorCitizen', TRUE),
-        c('Partner', TRUE),
-        c('Dependents', TRUE),
         c('tenure', TRUE),
         c('PhoneService', TRUE),
         c('MultipleLines', TRUE),
@@ -157,7 +154,8 @@ telco_data_raw <- telco_data_raw %>%                    # Change 1/0 to Yes/No t
 
 
 selected_cols    <- unlist(lapply(cols, function(x) if (x[2]) x[1]))   # only use the feature columns named in `cols`
-telco_data_raw   <- telco_data_raw %>% select(selected_cols)
+telco_data_raw   <- telco_data_raw %>% select(all_of(selected_cols))
+
 
 
 glimpse(telco_data_raw)
@@ -165,6 +163,7 @@ sdf_schema(telco_data_raw)
 
 ## Machine Learning Model Training
 ## ---------------------------------
+# 1: R Logistic regression
 
 sample_size      <- telco_data_raw %>% count()  %>% collect() %>% first() %>% as.numeric()  # Sample Sparlyr dataframe to run on R local
 telco_data_raw_r <- telco_data_raw %>% sample_n(size = sample_size) %>% collect()           # Collect Sparlyr to R
@@ -193,7 +192,7 @@ nrow(test)     # 20%
 model <- glm(Churn ~ gender + tenure + TotalCharges + Contract, 
              data = train, family = binomial) # Issue in sampling (hould be train dataset)
 
-predictions <- predict(model, test, type = "response")
+predictions <- stats::predict(model, test, type = "response")
 
 
 saveRDS(model, "model.rds")
@@ -215,6 +214,31 @@ plot(roc_curve, main = "ROC", col = "blue", lwd = 2)
 #mlflow_save_model(model, "modele_regression_logistique")
 #mlflow_end_run()
 
+
+# 2: Sparlyr Multi-nomial Logistic regression
+
+partitions <- telco_data_raw %>% sdf_random_split(training = 0.7, test = 0.3, seed = 1111)
+
+
+train <- telco_data_raw %>% sparklyr::sdf_sample(fraction=0.7, replacement=FALSE)
+test  <- telco_data_raw %>% sparklyr::sdf_sample(fraction=0.3, replacement=FALSE)
+
+class(train)
+glimpse(train)
+
+model <-train %>% 
+            ml_logistic_regression(Churn ~ gender + tenure + TotalCharges + Contract)
+
+model
+train
+
+pred <- ml_predict(model, test)
+
+ml_binary_classification_evaluator(pred)
+
+coefficients <- tidy(model)
+
+coefficients 
 
 spark_disconnect(spark)
 
